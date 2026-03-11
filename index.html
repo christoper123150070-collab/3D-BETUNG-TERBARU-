@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Peta Betung dengan Marker</title>
-    <!-- Library Three.js & FBXLoader -->
+    <!-- Library Three.js & GLTFLoader -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://unpkg.com/fflate"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #020617; font-family: 'Inter', sans-serif; }
@@ -75,7 +75,8 @@
         <div class="w-64 h-1 bg-white/10 rounded-full overflow-hidden" id="progress-container">
             <div id="progress-bar" class="w-0 h-full bg-blue-600 transition-all duration-300"></div>
         </div>
-        <p id="status-text" class="text-slate-500 text-xs mt-4 tracking-widest uppercase">Menghubungkan</p>
+        <p id="status-text" class="text-slate-500 text-xs mt-4 tracking-widest uppercase text-center max-w-md">Menghubungkan</p>
+        <input type="file" id="fallback-input" accept=".glb,.gltf" class="hidden mt-6 text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
     </div>
 
     <!-- Marker Layer -->
@@ -110,8 +111,8 @@
         let currentModel = null;
         let raycaster, mouse;
 
-        // URL DIUBAH AGAR RAMAH SERVER (TANPA SPASI)
-        const MODEL_URL = 'peta.fbx'; 
+        // URL DIUBAH AGAR RAMAH SERVER (MENGGUNAKAN FORMAT GLB)
+        const MODEL_URL = 'peta.glb'; 
 
         // ==========================================
         // DATA MARKER / TITIK LOKASI
@@ -119,10 +120,10 @@
         const markersData = [
             {
                 id: 'site1',
-                position: { x: 10, y: 0, z: 20 },
-                title: "Kantor Pusat Betung",
-                description: "Ini adalah lokasi kantor utama di peta Betung. Area ini memiliki fasilitas lengkap.",
-                image: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=400&auto=format&fit=crop"
+                position: { x: 0, y: 45, z: -20 }, // Perkiraan titik puncak gunung (tinggi y = 45)
+                title: "Air Terjun Puncak Gunung",
+                description: "Destinasi wisata alam air terjun yang terletak di puncak gunung dengan pemandangan alam yang menakjubkan.",
+                image: "https://images.unsplash.com/photo-1433086966358-54859d0ed716?q=80&w=400&auto=format&fit=crop"
             },
             {
                 id: 'site2',
@@ -164,10 +165,55 @@
 
             window.addEventListener('resize', onWindowResize);
             
-            // Muat file FBX secara otomatis
+            // Muat file GLB secara otomatis
             loadModelRobust(MODEL_URL);
             
             animate();
+        }
+
+        // Fungsi untuk memproses model setelah di-load
+        function processLoadedGLTF(gltf, blobUrl) {
+            currentModel = gltf.scene;
+            const box = new THREE.Box3().setFromObject(currentModel);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const scale = 200 / maxDim;
+            currentModel.scale.setScalar(scale);
+            currentModel.position.sub(center.multiplyScalar(scale));
+            currentModel.position.y = 0;
+
+            // Mengatasi warna hitam jika material bermasalah dan mengaktifkan bayangan
+            currentModel.traverse((node) => {
+                if (node.isMesh) {
+                    node.castShadow = true;
+                    node.receiveShadow = true;
+                    if (node.material) {
+                        const materials = Array.isArray(node.material) ? node.material : [node.material];
+                        materials.forEach(m => {
+                            if (!m.map || (m.color && m.color.getHex() === 0x000000)) {
+                                if (m.color) m.color.setHex(0xd0d0d0);
+                            }
+                            m.transparent = false;
+                            m.opacity = 1.0;
+                        });
+                    }
+                }
+            });
+
+            scene.add(currentModel);
+            
+            initMarkers();
+            
+            // Memaksa render frame pertama sebelum loader ditutup
+            // Ini mencegah layar berkedip kosong (blank) pada model berukuran besar
+            renderer.render(scene, camera);
+            
+            if (blobUrl) URL.revokeObjectURL(blobUrl);
+            const loaderEl = document.getElementById('loader');
+            loaderEl.style.opacity = '0';
+            setTimeout(() => loaderEl.style.display = 'none', 1000);
         }
 
         async function loadModelRobust(url) {
@@ -176,6 +222,7 @@
             const progress = document.getElementById('progress-bar');
             const statusText = document.getElementById('status-text');
             const loaderTitle = document.getElementById('loader-title');
+            const fallbackInput = document.getElementById('fallback-input');
 
             const absoluteUrl = location.origin !== 'null' ? `${location.origin}/${encodeURIComponent(url)}` : encodeURI(url);
 
@@ -219,54 +266,38 @@
                 const blob = new Blob(chunks);
                 const blobUrl = URL.createObjectURL(blob);
 
-                const loader = new THREE.FBXLoader();
-                loader.load(blobUrl, (object) => {
-                    currentModel = object;
-                    const box = new THREE.Box3().setFromObject(object);
-                    const size = box.getSize(new THREE.Vector3());
-                    const center = box.getCenter(new THREE.Vector3());
-                    
-                    const maxDim = Math.max(size.x, size.y, size.z);
-                    const scale = 200 / maxDim;
-                    object.scale.setScalar(scale);
-                    object.position.sub(center.multiplyScalar(scale));
-                    object.position.y = 0;
-
-                    // Mengatasi warna hitam jika FBX tidak membawa tekstur
-                    object.traverse((node) => {
-                        if (node.isMesh) {
-                            node.castShadow = true;
-                            node.receiveShadow = true;
-                            if (node.material) {
-                                const materials = Array.isArray(node.material) ? node.material : [node.material];
-                                materials.forEach(m => {
-                                    if (!m.map || (m.color && m.color.getHex() === 0x000000)) {
-                                        if (m.color) m.color.setHex(0xd0d0d0);
-                                    }
-                                    m.transparent = false;
-                                    m.opacity = 1.0;
-                                });
-                            }
-                        }
-                    });
-
-                    scene.add(object);
-                    
-                    initMarkers();
-                    
-                    URL.revokeObjectURL(blobUrl);
-                    loaderEl.style.opacity = '0';
-                    setTimeout(() => loaderEl.style.display = 'none', 1000);
-
+                // Menggunakan GLTFLoader
+                const loader = new THREE.GLTFLoader();
+                loader.load(blobUrl, (gltf) => {
+                    processLoadedGLTF(gltf, blobUrl);
                 });
 
             } catch (error) {
                 console.error("Fetch Error:", error);
-                loaderTitle.innerText = "ERROR";
+                loaderTitle.innerText = "FILE TIDAK DITEMUKAN";
                 loaderTitle.style.color = "#ef4444";
+                loaderTitle.classList.remove('animate-pulse');
                 progressContainer.style.display = "none";
-                statusText.className = "error-text text-sm mt-4";
-                statusText.innerHTML = error.message;
+                statusText.className = "text-slate-300 text-sm mt-4 text-center max-w-md leading-relaxed";
+                statusText.innerHTML = "Untuk melihat preview di halaman ini, silakan klik tombol di bawah untuk memilih file <code>peta.glb</code> dari komputer Anda secara manual.<br><br><span class='text-xs text-slate-500 block'>(Error aslinya: " + error.message + ")</span>";
+                
+                fallbackInput.classList.remove('hidden');
+                fallbackInput.addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    
+                    fallbackInput.classList.add('hidden');
+                    loaderTitle.innerText = "MEMPROSES...";
+                    loaderTitle.style.color = "#fff";
+                    loaderTitle.classList.add('animate-pulse');
+                    statusText.innerHTML = "Membangun ulang scene 3D...";
+                    
+                    const localBlobUrl = URL.createObjectURL(file);
+                    const loader = new THREE.GLTFLoader();
+                    loader.load(localBlobUrl, (gltf) => {
+                        processLoadedGLTF(gltf, localBlobUrl);
+                    });
+                });
             }
         }
 
@@ -360,6 +391,22 @@
             if (intersects.length > 0) {
                 const point = intersects[0].point;
                 const localPoint = currentModel.worldToLocal(point.clone());
+                
+                // Mencegah penambahan marker duplikat di titik yang berdekatan
+                // Jika jarak klik kurang dari 2.0 unit dari marker yang ada, batalkan.
+                const jarakMinimal = 2.0; 
+                const isDuplicate = markersData.some(marker => {
+                    const dx = marker.position.x - localPoint.x;
+                    const dy = marker.position.y - localPoint.y;
+                    const dz = marker.position.z - localPoint.z;
+                    const jarak = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                    return jarak < jarakMinimal;
+                });
+
+                if (isDuplicate) {
+                    console.log("📍 Klik diabaikan: Sudah ada marker di area ini.");
+                    return; // Hentikan fungsi
+                }
                 
                 const coordString = `{ x: ${localPoint.x.toFixed(3)}, y: ${localPoint.y.toFixed(3)}, z: ${localPoint.z.toFixed(3)} }`;
                 console.log("📍 Koordinat Baru:", coordString);
