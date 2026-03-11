@@ -84,7 +84,7 @@
                 <p class="text-xs text-slate-400 mt-0.5">Tampilkan data geologi</p>
             </div>
             <div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
-                <input type="checkbox" name="toggle" id="geology-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out z-10" onclick="toggleGeologyLayer()"/>
+                <input type="checkbox" name="toggle" id="geology-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out z-10" onchange="toggleGeologyLayer()"/>
                 <label for="geology-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-600 cursor-pointer transition-colors duration-200 ease-in-out"></label>
             </div>
         </div>
@@ -97,6 +97,25 @@
             <div id="progress-bar" class="w-0 h-full bg-blue-600 transition-all duration-300"></div>
         </div>
         <p id="status-text" class="text-slate-500 text-xs mt-4 tracking-widest uppercase text-center max-w-md">Menyiapkan Environment</p>
+
+        <!-- UI Fallback Pemilih File Manual (Muncul Jika Error) -->
+        <div id="fallback-ui" class="hidden mt-8 flex flex-col items-center gap-3 bg-slate-800/80 backdrop-blur-md p-6 rounded-xl border border-slate-700 w-80 shadow-2xl">
+            <p class="text-white text-sm font-bold mb-2">Unggah File Manual</p>
+            
+            <div class="w-full">
+                <label class="block text-xs text-slate-400 mb-1">Base Map (.glb) <span class="text-red-400">*</span></label>
+                <input type="file" id="fallback-base" accept=".glb" class="w-full text-xs text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer transition-colors"/>
+            </div>
+            
+            <div class="w-full mt-2">
+                <label class="block text-xs text-slate-400 mb-1">Geology Map (.glb) <span class="text-slate-500">[Opsional]</span></label>
+                <input type="file" id="fallback-geo" accept=".glb" class="w-full text-xs text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 cursor-pointer transition-colors"/>
+            </div>
+            
+            <button onclick="loadLocalFiles()" class="mt-4 w-full bg-slate-200 hover:bg-white text-slate-900 text-sm py-2 rounded-lg font-bold transition-colors">
+                Muat 3D Lokal
+            </button>
+        </div>
     </div>
 
     <!-- Marker Layer -->
@@ -195,7 +214,7 @@
 
             window.addEventListener('resize', onWindowResize);
             
-            // Mulai memuat kedua model
+            // Mulai memuat kedua model secara otomatis
             loadAllModels();
             
             animate();
@@ -211,6 +230,8 @@
             const statusText = document.getElementById('status-text');
             const loaderTitle = document.getElementById('loader-title');
             const loaderEl = document.getElementById('loader');
+            const progressContainer = document.getElementById('progress-container');
+            const fallbackUi = document.getElementById('fallback-ui');
 
             try {
                 // 1. Muat Base Map
@@ -221,21 +242,7 @@
                 });
 
                 // Proses Base Map (Skala & Posisi)
-                const box = new THREE.Box3().setFromObject(baseModel);
-                const size = box.getSize(new THREE.Vector3());
-                const center = box.getCenter(new THREE.Vector3());
-                
-                const maxDim = Math.max(size.x, size.y, size.z);
-                const scale = 200 / maxDim;
-                
-                baseModel.scale.setScalar(scale);
-                // Simpan posisi origin hasil penyesuaian agar bisa dipakai model Geologi
-                const targetPosition = center.clone().multiplyScalar(scale).negate();
-                targetPosition.y = 0; // Set dasar ke y=0
-                baseModel.position.copy(targetPosition);
-
-                applyStandardMaterial(baseModel);
-                scene.add(baseModel);
+                const targetPosition = processAndScaleModel(baseModel, true);
 
                 // 2. Muat Geologi Map
                 statusText.innerText = "MENGUNDUH LAPISAN GEOLOGI...";
@@ -246,13 +253,12 @@
                     });
 
                     // Terapkan skala & posisi yang PERSIS SAMA dengan Base Map
-                    geologyModel.scale.setScalar(scale);
+                    geologyModel.scale.copy(baseModel.scale);
                     geologyModel.position.copy(targetPosition);
+                    // Tambahkan sedikit offset (ketinggian) agar tidak berbenturan/tenggelam di Base Map
+                    geologyModel.position.y += 0.2; 
 
-                    // Buat material geologi menjadi semi transparan
                     applyTransparentMaterial(geologyModel);
-                    
-                    // Default tersembunyi
                     geologyModel.visible = false;
                     scene.add(geologyModel);
 
@@ -263,27 +269,111 @@
                 }
 
                 // 3. Selesaikan Loading
-                initMarkers();
-                statusText.innerText = "MEMBANGUN ENVIRONMENT 3D...";
-                
-                // Paksa render frame pertama
-                renderer.render(scene, camera);
-                
-                // Sembunyikan Loader
-                loaderEl.style.opacity = '0';
-                setTimeout(() => loaderEl.style.display = 'none', 1000);
+                finalizeLoading(loaderEl, statusText);
 
             } catch (error) {
+                // PENANGANAN ERROR -> TAMPILKAN FALLBACK UI
                 console.error("Fatal Load Error:", error);
-                loaderTitle.innerText = "GAGAL MEMUAT";
+                loaderTitle.innerText = "GAGAL MEMUAT SERVER FILE";
                 loaderTitle.style.color = "#ef4444";
                 loaderTitle.classList.remove('animate-pulse');
+                progressContainer.style.display = 'none';
+                
                 statusText.className = "text-slate-300 text-sm mt-4 text-center max-w-md";
-                statusText.innerHTML = `Base map <b>${BASE_MAP_URL}</b> tidak ditemukan.<br>Pastikan file tersedia dan nama file sesuai (case-sensitive).`;
+                statusText.innerHTML = `Base map <b>${BASE_MAP_URL}</b> tidak ditemukan.<br>Silakan pilih file secara manual dari komputer Anda di bawah ini:`;
+                
+                fallbackUi.classList.remove('hidden');
             }
         }
 
-        // Wrapper Promise untuk GLTFLoader
+        // ==========================================
+        // FITUR FALLBACK / PEMILIH FILE LOKAL
+        // ==========================================
+        async function loadLocalFiles() {
+            const baseInput = document.getElementById('fallback-base');
+            const geoInput = document.getElementById('fallback-geo');
+            
+            if (!baseInput.files || baseInput.files.length === 0) {
+                alert("Harap pilih file Base Map (.glb) terlebih dahulu!");
+                return;
+            }
+
+            const loaderTitle = document.getElementById('loader-title');
+            const statusText = document.getElementById('status-text');
+            const loaderEl = document.getElementById('loader');
+            const fallbackUi = document.getElementById('fallback-ui');
+            const progressContainer = document.getElementById('progress-container');
+
+            // Reset UI Loading
+            fallbackUi.classList.add('hidden');
+            progressContainer.style.display = 'block';
+            loaderTitle.innerText = "MEMPROSES FILE LOKAL...";
+            loaderTitle.style.color = "#fff";
+            loaderTitle.classList.add('animate-pulse');
+            progressBase = 0;
+            progressGeo = 0;
+
+            try {
+                // Buat URL Blob Sementara dari file input
+                const baseUrl = URL.createObjectURL(baseInput.files[0]);
+                
+                statusText.innerText = "MEMUAT BASE MAP LOKAL...";
+                baseModel = await loadModelPromise(baseUrl, (percent) => {
+                    progressBase = percent;
+                    updateCombinedProgress();
+                });
+
+                const targetPosition = processAndScaleModel(baseModel, true);
+
+                // Jika pengguna juga mengunggah model Geologi
+                if (geoInput.files && geoInput.files.length > 0) {
+                    const geoUrl = URL.createObjectURL(geoInput.files[0]);
+                    statusText.innerText = "MEMUAT GEOLOGI MAP LOKAL...";
+                    
+                    try {
+                        geologyModel = await loadModelPromise(geoUrl, (percent) => {
+                            progressGeo = percent;
+                            updateCombinedProgress();
+                        });
+
+                        geologyModel.scale.copy(baseModel.scale);
+                        geologyModel.position.copy(targetPosition);
+                        // Tambahkan sedikit offset (ketinggian) agar tidak berbenturan/tenggelam di Base Map lokal
+                        geologyModel.position.y += 0.2;
+
+                        applyTransparentMaterial(geologyModel);
+                        geologyModel.visible = false;
+                        scene.add(geologyModel);
+                        
+                        document.getElementById('geology-toggle').disabled = false;
+                        document.getElementById('geology-toggle').checked = false; // reset toggle state
+                    } catch (geoError) {
+                        console.error("Gagal memuat geologi lokal", geoError);
+                        alert("Gagal memuat file Geologi. Melanjutkan dengan Base Map saja.");
+                        document.getElementById('geology-toggle').disabled = true;
+                    }
+                } else {
+                    // Bypass loading geologi
+                    progressGeo = 100;
+                    updateCombinedProgress();
+                    document.getElementById('geology-toggle').disabled = true;
+                }
+
+                finalizeLoading(loaderEl, statusText);
+
+            } catch (error) {
+                console.error("Local file error:", error);
+                alert("Gagal membaca file lokal: " + error.message);
+                fallbackUi.classList.remove('hidden');
+                progressContainer.style.display = 'none';
+                loaderTitle.innerText = "GAGAL MEMUAT";
+                loaderTitle.classList.remove('animate-pulse');
+            }
+        }
+
+        // ==========================================
+        // UTILITAS LOADING & PROCESSING
+        // ==========================================
         function loadModelPromise(url, onProgressCb) {
             return new Promise((resolve, reject) => {
                 const loader = new THREE.GLTFLoader();
@@ -294,13 +384,40 @@
                         if (xhr.lengthComputable) {
                             onProgressCb((xhr.loaded / xhr.total) * 100);
                         } else {
-                            // Simulasi progress jika length tidak diketahui
                             onProgressCb(50); 
                         }
                     },
                     (error) => reject(error)
                 );
             });
+        }
+
+        function processAndScaleModel(model, isBaseModel) {
+            const box = new THREE.Box3().setFromObject(model);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const scale = 200 / maxDim;
+            
+            model.scale.setScalar(scale);
+            const targetPosition = center.clone().multiplyScalar(scale).negate();
+            targetPosition.y = 0; 
+            model.position.copy(targetPosition);
+
+            if(isBaseModel) {
+                applyStandardMaterial(model);
+                scene.add(model);
+            }
+            return targetPosition;
+        }
+
+        function finalizeLoading(loaderEl, statusText) {
+            initMarkers();
+            statusText.innerText = "MEMBANGUN ENVIRONMENT 3D...";
+            renderer.render(scene, camera);
+            loaderEl.style.opacity = '0';
+            setTimeout(() => loaderEl.style.display = 'none', 1000);
         }
 
         // Fungsi Perbaikan Material Dasar
@@ -328,16 +445,18 @@
         function applyTransparentMaterial(model) {
             model.traverse((node) => {
                 if (node.isMesh) {
-                    node.castShadow = false; // Hindari bayangan ganda yang bertumpuk
+                    node.castShadow = false; 
                     node.receiveShadow = true;
+                    // Paksa render model ini setelah base map selesai dirender
+                    node.renderOrder = 1; 
                     if (node.material) {
                         const materials = Array.isArray(node.material) ? node.material : [node.material];
                         materials.forEach(m => {
-                            // Klon material agar tidak berbenturan jika share material dengan base map
                             const mClone = m.clone(); 
                             mClone.transparent = true;
-                            mClone.opacity = 0.65; // Tingkat Transparansi (0.0 - 1.0)
-                            mClone.depthWrite = false; // Penting untuk mencegah artefak visual pada objek transparan
+                            mClone.opacity = 0.75; // Naikkan sedikit opacity agar lebih terlihat
+                            mClone.depthTest = true; 
+                            mClone.depthWrite = false; 
                             mClone.needsUpdate = true;
                             node.material = mClone;
                         });
@@ -350,9 +469,23 @@
         // FITUR TOGGLE LAYER
         // ==========================================
         window.toggleGeologyLayer = function() {
-            if (!geologyModel) return;
             const toggleBtn = document.getElementById('geology-toggle');
+            console.log("Toggle Status:", toggleBtn.checked); // Untuk debugging di console browser
+            
+            if (!geologyModel) {
+                console.warn("Geology model belum tersedia!");
+                return;
+            }
+            
+            // Ubah visibilitas model utama
             geologyModel.visible = toggleBtn.checked;
+            
+            // Pastikan visibilitas anak-anak mesh di dalamnya juga ter-update (berguna untuk beberapa struktur GLTF)
+            geologyModel.traverse((child) => {
+                if (child.isMesh) {
+                    child.visible = toggleBtn.checked;
+                }
+            });
         };
 
         // ==========================================
@@ -366,7 +499,6 @@
             markersData.forEach(data => {
                 const dummy = new THREE.Object3D();
                 dummy.position.set(data.position.x, data.position.y, data.position.z);
-                // Attach ke baseModel agar posisinya mengikuti rotasi dan skala model
                 baseModel.add(dummy); 
                 data.dummy3D = dummy;
 
@@ -436,10 +568,8 @@
         };
 
         function onDoubleClickGetCoordinates(event) {
-            // Tentukan objek mana yang bisa di-klik (Raycast Target)
             const intersectTargets = [];
             if (baseModel && baseModel.visible) intersectTargets.push(baseModel);
-            // Tambahkan layer geologi ke target HANYA JIKA layer tersebut sedang ditampilkan (visible)
             if (geologyModel && geologyModel.visible) intersectTargets.push(geologyModel);
 
             if (intersectTargets.length === 0) return;
@@ -448,16 +578,12 @@
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
             raycaster.setFromCamera(mouse, camera);
-            // Cek persimpangan terhadap model-model yang aktif
             const intersects = raycaster.intersectObjects(intersectTargets, true);
 
             if (intersects.length > 0) {
-                // Ambil titik paling atas (indeks 0)
                 const point = intersects[0].point;
-                // Konversi koordinat global (scene) kembali ke koordinat lokal (baseModel)
                 const localPoint = baseModel.worldToLocal(point.clone());
                 
-                // Mencegah penambahan marker duplikat di titik yang berdekatan
                 const jarakMinimal = 2.0; 
                 const isDuplicate = markersData.some(marker => {
                     const dx = marker.position.x - localPoint.x;
