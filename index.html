@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D MODEL BETUNG</title>
+    <title>3D MODEL BETUNG - AUTO LOAD</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://unpkg.com/fflate"></script>
@@ -26,14 +26,13 @@
 </head>
 <body>
 
-    <!-- Overlay UI -->
     <div class="absolute inset-0 ui-chrome z-10 p-8 flex flex-col justify-between">
         <div class="flex justify-between items-start">
             <div class="glass-card p-5 rounded-2xl shadow-2xl">
                 <h1 class="text-2xl font-black text-white tracking-tighter italic">3D MODEL BETUNG</h1>
                 <div class="flex items-center gap-2 mt-1">
-                    <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                    <p class="text-[10px] text-slate-400 font-bold uppercase tracking-[0.3em]">4K Texture Ready • Ray-Trace Sim</p>
+                    <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                    <p class="text-[10px] text-slate-400 font-bold uppercase tracking-[0.3em]">Live Renderer • Auto-Loaded</p>
                 </div>
             </div>
         </div>
@@ -49,39 +48,27 @@
         </div>
     </div>
 
-    <!-- Upload Prompt -->
-    <div id="upload-prompt" class="absolute inset-0 z-40 flex items-center justify-center bg-black/95">
-        <div class="text-center max-w-lg p-12">
-            <h2 class="text-5xl font-black text-white mb-6 tracking-tighter">SURFACE PERFECTION</h2>
-            <p class="text-slate-500 text-lg mb-10 leading-relaxed font-medium">Visualisasikan model FBX Anda dengan micro-imperfections dan simulasi cahaya global.</p>
-            <label class="group relative inline-block cursor-pointer">
-                <div class="absolute -inset-1 bg-gradient-to-r from-blue-600 to-emerald-600 rounded-2xl blur opacity-25 group-hover:opacity-75 transition duration-1000 group-hover:duration-200"></div>
-                <div class="relative px-12 py-5 bg-white text-black rounded-2xl font-black text-sm tracking-widest uppercase transition-all active:scale-95">
-                    MUAT MODEL 4K (.FBX)
-                </div>
-                <input type="file" id="file-input" accept=".fbx" class="hidden">
-            </label>
-        </div>
-    </div>
-
-    <div id="loader" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black transition-opacity duration-1000 hidden">
-        <div class="text-white font-black italic text-4xl mb-4 animate-pulse">RENDERING...</div>
+    <div id="loader" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black transition-opacity duration-1000">
+        <div class="text-white font-black italic text-4xl mb-4 animate-pulse">INITIALIZING...</div>
         <div class="w-64 h-1 bg-white/10 rounded-full overflow-hidden">
-            <div id="progress-bar" class="w-0 h-full bg-white transition-all duration-300"></div>
+            <div id="progress-bar" class="w-0 h-full bg-blue-600 transition-all duration-300"></div>
         </div>
+        <p id="status-text" class="text-slate-500 text-xs mt-4 tracking-widest uppercase">Loading 3D Assets</p>
     </div>
 
     <script>
-        let scene, camera, renderer, controls, envMap;
+        let scene, camera, renderer, controls;
         let isInitialized = false;
+
+        // GANTI INI DENGAN NAMA FILE FBX ANDA
+        const MODEL_URL = 'nama_file_anda.fbx'; 
 
         async function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x000000);
+            scene.background = new THREE.Color(0x050505);
             
-            // Camera dengan FOV cinematic
             camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 10000);
-            camera.position.set(200, 150, 400);
+            camera.position.set(300, 200, 500);
 
             renderer = new THREE.WebGLRenderer({ 
                 antialias: true, 
@@ -89,116 +76,98 @@
                 logarithmicDepthBuffer: true
             });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             
-            // Standard PBR Settings
             renderer.outputEncoding = THREE.sRGBEncoding;
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.toneMappingExposure = 1.0;
+            renderer.toneMappingExposure = 1.2;
             renderer.shadowMap.enabled = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            renderer.physicallyCorrectLights = true;
             
             document.body.appendChild(renderer.domElement);
 
-            // Lighting System
-            // 1. Ambient Occlusion Simulation (Sky Light)
-            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.5);
+            // Lighting
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
             scene.add(hemiLight);
 
-            // 2. Studio Lighting (Key)
-            const sunLight = new THREE.DirectionalLight(0xffffff, 4.0);
+            const sunLight = new THREE.DirectionalLight(0xffffff, 3.0);
             sunLight.position.set(100, 250, 150);
             sunLight.castShadow = true;
-            sunLight.shadow.mapSize.set(4096, 4096); // Ultra High Shadow Res
-            sunLight.shadow.bias = -0.0001;
+            sunLight.shadow.mapSize.set(2048, 2048);
             scene.add(sunLight);
 
-            // 3. Accent Lights (Gold & Ice)
-            const rim1 = new THREE.SpotLight(0x3b82f6, 15);
-            rim1.position.set(-200, 100, -100);
-            scene.add(rim1);
-
-            const rim2 = new THREE.SpotLight(0xf59e0b, 10);
-            rim2.position.set(200, 50, -100);
-            scene.add(rim2);
-
-            // Controls
-            controls = new OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.03;
-            controls.autoRotate = true;
-            controls.autoRotateSpeed = 0.5;
-
-            // Ground Reflective Surface
+            // Ground
             const ground = new THREE.Mesh(
-                new THREE.PlaneGeometry(5000, 5000),
-                new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1, metalness: 0.5 })
+                new THREE.PlaneGeometry(10000, 10000),
+                new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2, metalness: 0.8 })
             );
             ground.rotation.x = -Math.PI / 2;
             ground.receiveShadow = true;
             scene.add(ground);
 
-            isInitialized = true;
-            
-            document.getElementById('file-input').addEventListener('change', (e) => {
-                if(e.target.files.length > 0) loadFBX(e.target.files[0]);
-            });
+            // Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.autoRotate = true;
 
             window.addEventListener('resize', onWindowResize);
+            
+            // Start loading the model automatically
+            loadModel(MODEL_URL);
+            
+            isInitialized = true;
             animate();
         }
 
-        function loadFBX(file) {
+        function loadModel(url) {
             const loader = new THREE.FBXLoader();
             const loaderEl = document.getElementById('loader');
             const progress = document.getElementById('progress-bar');
-            const url = URL.createObjectURL(file);
-
-            document.getElementById('upload-prompt').classList.add('hidden');
-            loaderEl.classList.remove('hidden');
+            const statusText = document.getElementById('status-text');
 
             loader.load(url, (object) => {
                 const box = new THREE.Box3().setFromObject(object);
                 const size = box.getSize(new THREE.Vector3());
                 const center = box.getCenter(new THREE.Vector3());
-                const scale = 180 / Math.max(size.x, size.y, size.z);
                 
+                // Auto Scaling
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const scale = 200 / maxDim;
                 object.scale.setScalar(scale);
+                
+                // Center and position on floor
                 object.position.sub(center.multiplyScalar(scale));
-                object.position.y = 0; // Snap to floor
+                object.position.y = 0;
 
                 object.traverse((node) => {
                     if (node.isMesh) {
                         node.castShadow = true;
                         node.receiveShadow = true;
-                        
-                        // Enforce Ultra-Detailed PBR Materials
                         if (node.material) {
-                            const mats = Array.isArray(node.material) ? node.material : [node.material];
-                            mats.forEach((m, idx) => {
-                                const pbr = new THREE.MeshStandardMaterial({
-                                    color: m.color || 0xffffff,
-                                    map: m.map,
-                                    normalMap: m.normalMap,
-                                    roughnessMap: m.roughnessMap,
-                                    metalnessMap: m.metalnessMap,
-                                    roughness: 0.4, // Default realism if map missing
-                                    metalness: 0.6,
-                                    envMapIntensity: 1.5
-                                });
-                                if (Array.isArray(node.material)) node.material[idx] = pbr;
-                                else node.material = pbr;
+                            const materials = Array.isArray(node.material) ? node.material : [node.material];
+                            materials.forEach(m => {
+                                m.roughness = Math.min(m.roughness || 0.4, 0.5);
+                                m.metalness = Math.max(m.metalness || 0.5, 0.3);
+                                m.envMapIntensity = 1.2;
                             });
                         }
                     }
                 });
 
                 scene.add(object);
+                
+                // Hide loader
                 loaderEl.style.opacity = '0';
-                setTimeout(() => loaderEl.classList.add('hidden'), 1000);
+                setTimeout(() => loaderEl.style.display = 'none', 1000);
+
             }, (xhr) => {
-                progress.style.width = (xhr.loaded / xhr.total * 100) + '%';
+                const percent = (xhr.loaded / xhr.total * 100);
+                progress.style.width = percent + '%';
+                statusText.innerText = `FETCHING DATA: ${Math.round(percent)}%`;
+            }, (error) => {
+                console.error(error);
+                statusText.innerText = "Gagal memuat model. Pastikan file ada.";
+                statusText.style.color = "#ff4444";
             });
         }
 
@@ -210,13 +179,10 @@
 
         function animate() {
             requestAnimationFrame(animate);
-            if (isInitialized) {
-                controls.update();
-                renderer.render(scene, camera);
-            }
+            if (controls) controls.update();
+            if (renderer && scene && camera) renderer.render(scene, camera);
         }
 
-        const OrbitControls = THREE.OrbitControls;
         init();
     </script>
 </body>
