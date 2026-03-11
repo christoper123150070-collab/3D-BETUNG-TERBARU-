@@ -27,7 +27,9 @@
         }
         .marker {
             position: absolute; top: 0; left: 0; pointer-events: auto; cursor: pointer;
-            transform: translate(-50%, -50%); transition: transform 0.1s ease-out;
+            /* DIUBAH: translate(-50%, -100%) agar ujung lancip bawah pin tepat di kordinat 3D */
+            /* Transisi dihapus pada kontainer ini agar pergerakan mengikuti 3D tidak delay/lag */
+            transform: translate(-50%, -100%); 
         }
         .marker-icon {
             width: 32px; height: 32px; background: #ef4444; border-radius: 50% 50% 50% 0;
@@ -139,7 +141,7 @@
     <!-- Tooltip Notifikasi Kordinat -->
     <div id="coord-toast">Koordinat Tersalin!</div>
 
-    <!-- Legenda Geologi (Diperbarui sesuai format) -->
+    <!-- Legenda Geologi (Diperbarui sesuai format, posisi tetap di kanan bawah) -->
     <div id="geology-legend" class="absolute bottom-6 right-6 w-80 max-h-[22rem] flex flex-col bg-slate-900/90 backdrop-blur-xl p-5 rounded-2xl border border-slate-700 shadow-2xl z-20 transition-all duration-500 opacity-0 pointer-events-none translate-y-8">
         <h3 class="text-sm font-bold text-white mb-4 flex items-center gap-2 border-b border-slate-700 pb-2 shrink-0">
             <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path></svg>
@@ -191,6 +193,35 @@
                     </ul>
                 </div>
             </div>
+
+            <!-- Simbol Keterangan Tambahan -->
+            <div class="border-t border-slate-700/80 pt-4 mt-2">
+                <p class="text-xs font-bold text-white mb-3">Keterangan Simbol</p>
+                <div class="space-y-3 pl-1">
+                    <!-- Pusat Erupsi -->
+                    <div class="flex items-center gap-3">
+                        <div class="w-3.5 h-3.5 rounded-full bg-orange-500 shrink-0 border border-orange-300/80 shadow-[0_0_8px_rgba(249,115,22,0.6)]"></div>
+                        <span class="text-[11px] text-slate-200 font-medium tracking-wide">Pusat erupsi</span>
+                    </div>
+                    <!-- Kawah -->
+                    <div class="flex items-center gap-3">
+                        <!-- SVG Kawah dengan garis-garis menjorok ke dalam -->
+                        <svg class="w-4 h-4 text-red-500 shrink-0 drop-shadow-[0_0_5px_rgba(239,68,68,0.6)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <path d="M4 16a8 8 0 0 1 16 0" stroke-linecap="round"></path>
+                            <line x1="12" y1="8" x2="12" y2="12" stroke-linecap="round"></line>
+                            <line x1="7.5" y1="9.5" x2="10" y2="12" stroke-linecap="round"></line>
+                            <line x1="16.5" y1="9.5" x2="14" y2="12" stroke-linecap="round"></line>
+                        </svg>
+                        <span class="text-[11px] text-slate-200 font-medium tracking-wide">Kawah</span>
+                    </div>
+                    <!-- Kelurusan -->
+                    <div class="flex items-center gap-3">
+                        <div class="w-4 border-t-[2.5px] border-dashed border-red-500 shrink-0 shadow-[0_0_5px_rgba(239,68,68,0.6)]"></div>
+                        <span class="text-[11px] text-slate-200 font-medium tracking-wide">Kelurusan</span>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -510,8 +541,18 @@
             container.innerHTML = '';
             if (!baseModel) return;
 
+            // Bersihkan dummy (titik tumpu) lama agar tidak terjadi duplikasi memori saat klik ganda
+            markersData.forEach(data => {
+                if (data.dummy3D && data.dummy3D.parent) {
+                    data.dummy3D.parent.remove(data.dummy3D);
+                }
+            });
+
             markersData.forEach(data => {
                 const dummy = new THREE.Object3D();
+                
+                // Murni menggunakan koordinat asli (baik dari double-click maupun hardcode)
+                // Fitur Auto-Snap (Raycaster) dihapus karena justru membuat koordinat meleset
                 dummy.position.set(data.position.x, data.position.y, data.position.z);
                 baseModel.add(dummy); 
                 data.dummy3D = dummy;
@@ -547,7 +588,9 @@
                 const y = (tempV.y * -0.5 + 0.5) * window.innerHeight;
 
                 data.htmlElement.style.display = 'block';
-                data.htmlElement.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+                // DIUBAH: Menggunakan left & top untuk kompatibilitas dengan transform ujung pin
+                data.htmlElement.style.left = `${x}px`;
+                data.htmlElement.style.top = `${y}px`;
                 data.htmlElement.style.zIndex = Math.round((1 - tempV.z) * 1000); 
             });
         }
