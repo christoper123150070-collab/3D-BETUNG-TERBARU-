@@ -3,684 +3,817 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Peta Betung dengan Layer Geologi</title>
-    <!-- Library Three.js & GLTFLoader -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://unpkg.com/fflate"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Gunung Betung: Advanced 3D Geological Interactive</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
+
     <style>
-        body { margin: 0; overflow: hidden; background-color: #020617; font-family: 'Inter', sans-serif; }
-        canvas { display: block; }
-        
-        /* Loading Screen */
-        #loader {
-            position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; background: #000; transition: opacity 1s;
+        :root {
+            --primary: #2ecc71;
+            --accent: #e67e22;
+            --dark-bg: #0a0a0c;
+            --card-bg: rgba(20, 20, 25, 0.8);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-main: #f0f0f0;
+            --transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        
-        /* Marker Styles */
-        #markers-container {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; overflow: hidden; z-index: 15;
-        }
-        .marker {
-            position: absolute; top: 0; left: 0; pointer-events: auto; cursor: pointer;
-            /* DIUBAH: translate(-50%, -100%) agar ujung lancip bawah pin tepat di kordinat 3D */
-            /* Transisi dihapus pada kontainer ini agar pergerakan mengikuti 3D tidak delay/lag */
-            transform: translate(-50%, -100%); 
-        }
-        .marker-icon {
-            width: 32px; height: 32px; background: #ef4444; border-radius: 50% 50% 50% 0;
-            transform: rotate(-45deg); border: 3px solid white; box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-            display: flex; align-items: center; justify-content: center; transition: all 0.2s;
-        }
-        .marker-icon::after { content: ''; width: 10px; height: 10px; background: white; border-radius: 50%; }
-        .marker:hover .marker-icon { background: #3b82f6; transform: rotate(-45deg) scale(1.2); }
-        .marker .tooltip {
-            position: absolute; bottom: 45px; left: 50%; transform: translateX(-50%);
-            background: rgba(0,0,0,0.8); color: white; padding: 4px 10px;
-            border-radius: 6px; font-size: 12px; font-weight: bold;
-            white-space: nowrap; opacity: 0; pointer-events: none; transition: 0.2s;
-        }
-        .marker:hover .tooltip { opacity: 1; bottom: 50px; }
 
-        /* Info Panel Modal */
-        #info-panel { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s; }
-        #info-panel.hidden-panel { transform: translateX(120%); opacity: 0; pointer-events: none; }
-
-        /* Toast Notifikasi Koordinat */
-        #coord-toast {
-            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-            background: rgba(16, 185, 129, 0.9); color: white; padding: 8px 16px;
-            border-radius: 8px; font-size: 14px; font-family: monospace;
-            opacity: 0; pointer-events: none; transition: 0.3s; z-index: 50;
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background-color: var(--dark-bg); 
+            color: var(--text-main);
+            overflow-x: hidden;
+            scroll-behavior: smooth;
         }
-        
-        .error-text { color: #ef4444; font-weight: bold; text-align: center; max-width: 80%; line-height: 1.5; }
 
-        /* Toggle Button Styles */
-        .toggle-checkbox:checked { right: 0; border-color: #3b82f6; }
-        .toggle-checkbox:checked + .toggle-label { background-color: #3b82f6; }
+        /* --- Custom Scrollbar --- */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--dark-bg); }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
 
-        /* Custom Scrollbar untuk Legenda */
-        .scrollbar-custom::-webkit-scrollbar { width: 6px; }
-        .scrollbar-custom::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); border-radius: 8px; }
-        .scrollbar-custom::-webkit-scrollbar-thumb { background: rgba(71, 85, 105, 0.8); border-radius: 8px; }
-        .scrollbar-custom::-webkit-scrollbar-thumb:hover { background: rgba(100, 116, 139, 1); }
+        /* --- SPA Transition Engine --- */
+        .page-wrapper {
+            position: relative;
+            width: 100%;
+            min-height: 100vh;
+        }
+
+        .section-view {
+            display: none;
+            opacity: 0;
+            transition: opacity 0.8s ease;
+            width: 100%;
+        }
+
+        .section-view.active {
+            display: block;
+            opacity: 1;
+        }
+
+        /* --- Premium Layout Halaman 1 --- */
+        .hero-section {
+            height: 100vh;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.2), var(--dark-bg)),
+                        url('https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1920&q=80');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+        }
+
+        .hero-content {
+            text-align: center;
+            z-index: 2;
+            padding: 0 20px;
+        }
+
+        .hero-title {
+            font-size: clamp(3rem, 8vw, 6rem);
+            font-weight: 800;
+            letter-spacing: -2px;
+            background: linear-gradient(to bottom, #fff, #888);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 20px;
+            transform: translateY(30px);
+            animation: slideUp 1s forwards;
+        }
+
+        @keyframes slideUp { to { transform: translateY(0); } }
+
+        .btn-premium {
+            padding: 18px 45px;
+            background: var(--primary);
+            border: none;
+            border-radius: 100px;
+            color: #000;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: var(--transition);
+            box-shadow: 0 10px 30px rgba(46, 204, 113, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn-premium:hover {
+            transform: translateY(-5px) scale(1.05);
+            box-shadow: 0 15px 40px rgba(46, 204, 113, 0.5);
+            background: #fff;
+        }
+
+        /* --- Content Layout --- */
+        .content-grid {
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 100px 20px;
+        }
+
+        .info-panel {
+            background: var(--card-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 32px;
+            padding: 60px;
+            margin-bottom: 80px;
+            backdrop-filter: blur(20px);
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 1s cubic-bezier(0.2, 1, 0.3, 1);
+        }
+
+        .info-panel.visible {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .info-panel:nth-child(even) { direction: rtl; }
+        .info-panel:nth-child(even) .text-content { direction: ltr; }
+
+        .text-content h2 {
+            font-size: 2.5rem;
+            margin-bottom: 25px;
+            color: var(--primary);
+        }
+
+        .text-content p {
+            line-height: 1.8;
+            color: #ccc;
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+            text-align: justify;
+        }
+
+        .visual-frame {
+            position: relative;
+            border-radius: 24px;
+            overflow: hidden;
+            height: 400px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+
+        .visual-frame img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 1s;
+        }
+
+        .visual-frame:hover img { transform: scale(1.1); }
+
+        /* --- 3D Viewer Interface --- */
+        #viewer-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            background: #000;
+        }
+
+        #main-canvas { width: 100%; height: 100%; display: block; }
+
+        .viewer-ui {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .top-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: auto;
+        }
+
+        .control-panel {
+            background: rgba(10, 10, 15, 0.9);
+            border: 1px solid var(--glass-border);
+            padding: 25px;
+            border-radius: 24px;
+            width: 320px;
+            pointer-events: auto;
+        }
+
+        .mode-selector {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .selector-btn {
+            padding: 12px;
+            background: #1a1a20;
+            border: 1px solid #333;
+            color: #888;
+            border-radius: 12px;
+            cursor: pointer;
+            text-align: left;
+            transition: 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .selector-btn.active {
+            background: var(--primary);
+            color: #000;
+            border-color: var(--primary);
+            font-weight: 700;
+        }
+
+        /* --- Legend System --- */
+        #geology-legend {
+            position: fixed;
+            bottom: 40px;
+            right: 40px;
+            background: rgba(0,0,0,0.85);
+            padding: 25px;
+            border-radius: 20px;
+            border: 1px solid var(--primary);
+            display: none;
+            width: 280px;
+            pointer-events: auto;
+        }
+
+        .legend-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 12px;
+        }
+
+        .dot { width: 18px; height: 18px; border-radius: 4px; }
+
+        /* --- Popup 360 Logic --- */
+        #modal-360 {
+            position: fixed;
+            inset: 0;
+            background: #000;
+            z-index: 9999;
+            display: none;
+        }
+
+        .btn-close-modal {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: #fff;
+            border: none;
+            cursor: pointer;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        /* --- Detail Layer 2 --- */
+        #detail-overlay {
+            position: absolute;
+            top: 50%;
+            right: 50px;
+            transform: translateY(-50%);
+            width: 450px;
+            max-height: 80vh;
+            background: white;
+            color: #000;
+            border-radius: 30px;
+            padding: 40px;
+            display: none;
+            z-index: 10001;
+            overflow-y: auto;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.5);
+        }
+
+        /* --- Loading State --- */
+        #master-loader {
+            position: fixed;
+            inset: 0;
+            background: var(--dark-bg);
+            z-index: 100000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .load-track {
+            width: 300px;
+            height: 2px;
+            background: #222;
+            margin-top: 30px;
+            position: relative;
+        }
+
+        .load-fill {
+            position: absolute;
+            left: 0; top: 0; height: 100%;
+            background: var(--primary);
+            width: 0%;
+            transition: width 0.4s;
+        }
+
+        .instruction-tag {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255,255,255,0.1);
+            padding: 10px 25px;
+            border-radius: 100px;
+            backdrop-filter: blur(10px);
+            font-size: 0.9rem;
+            pointer-events: none;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
     </style>
 </head>
 <body>
 
-    <!-- Header UI & Controls -->
-    <div class="absolute top-6 left-6 text-white z-20 pointer-events-none">
-        <h1 class="text-2xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-emerald-400">
-            PETA BETUNG 3D
-        </h1>
-        <p class="text-slate-400 text-xs uppercase tracking-widest mt-1">Sistem Informasi Geografis</p>
+    <div id="master-loader">
+        <h2 style="letter-spacing: 5px; font-weight: 300;">MT. BETUNG DIGITAL</h2>
+        <div class="load-track"><div id="load-fill" class="load-fill"></div></div>
+        <p id="load-status" style="margin-top: 15px; font-size: 0.8rem; color: #666;">LOADING CORE ENGINE...</p>
+    </div>
+
+    <div class="page-wrapper">
         
-        <!-- UI Toggle Lapisan Geologi -->
-        <div class="mt-6 bg-slate-900/80 backdrop-blur-md p-4 rounded-xl border border-white/10 pointer-events-auto shadow-lg flex items-center justify-between w-72">
-            <div>
-                <p class="text-sm font-bold text-white">Lapisan Geologi</p>
-                <p class="text-xs text-slate-400 mt-0.5">Tampilkan data geologi</p>
-            </div>
-            <div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
-                <input type="checkbox" name="toggle" id="geology-toggle" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out z-10" onchange="toggleGeologyLayer()"/>
-                <label for="geology-toggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-600 cursor-pointer transition-colors duration-200 ease-in-out"></label>
-            </div>
-        </div>
-    </div>
-
-    <!-- Loader & Fallback UI -->
-    <div id="loader">
-        <div class="text-white font-black italic text-4xl mb-4 animate-pulse" id="loader-title">MEMUAT...</div>
-        <div class="w-64 h-1 bg-white/10 rounded-full overflow-hidden" id="progress-container">
-            <div id="progress-bar" class="w-0 h-full bg-blue-600 transition-all duration-300"></div>
-        </div>
-        <p id="status-text" class="text-slate-500 text-xs mt-4 tracking-widest uppercase text-center max-w-md">Menyiapkan Environment</p>
-
-        <!-- UI Fallback Pemilih File Manual (Muncul Jika Error) -->
-        <div id="fallback-ui" class="hidden mt-8 flex flex-col items-center gap-3 bg-slate-800/80 backdrop-blur-md p-6 rounded-xl border border-slate-700 w-80 shadow-2xl">
-            <p class="text-white text-sm font-bold mb-2">Unggah File Manual</p>
-            
-            <div class="w-full">
-                <label class="block text-xs text-slate-400 mb-1">Base Map (.glb) <span class="text-red-400">*</span></label>
-                <input type="file" id="fallback-base" accept=".glb" class="w-full text-xs text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer transition-colors"/>
-            </div>
-            
-            <div class="w-full mt-2">
-                <label class="block text-xs text-slate-400 mb-1">Geology Map (.glb) <span class="text-slate-500">[Opsional]</span></label>
-                <input type="file" id="fallback-geo" accept=".glb" class="w-full text-xs text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-emerald-600 file:text-white hover:file:bg-emerald-500 cursor-pointer transition-colors"/>
-            </div>
-            
-            <button onclick="loadLocalFiles()" class="mt-4 w-full bg-slate-200 hover:bg-white text-slate-900 text-sm py-2 rounded-lg font-bold transition-colors">
-                Muat 3D Lokal
-            </button>
-        </div>
-    </div>
-
-    <!-- Marker Layer -->
-    <div id="markers-container"></div>
-
-    <!-- Panel Informasi (Popup) -->
-    <div id="info-panel" class="absolute right-6 top-24 w-80 bg-slate-900/90 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl overflow-hidden hidden-panel z-20">
-        <div id="panel-image" class="w-full h-40 bg-slate-800 bg-cover bg-center hidden"></div>
-        <div class="p-6">
-            <div class="flex justify-between items-start mb-2">
-                <h3 id="panel-title" class="text-xl font-bold text-white leading-tight">Nama Lokasi</h3>
-                <button onclick="closePanel()" class="text-slate-400 hover:text-white bg-slate-800 p-1 rounded-full">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                </button>
-            </div>
-            <p id="panel-desc" class="text-slate-300 text-sm leading-relaxed mb-4">Deskripsi lokasi.</p>
-        </div>
-    </div>
-
-    <!-- Tooltip Notifikasi Kordinat -->
-    <div id="coord-toast">Koordinat Tersalin!</div>
-
-    <!-- Legenda Geologi (Diperbarui sesuai format, posisi tetap di kanan bawah) -->
-    <div id="geology-legend" class="absolute bottom-6 right-6 w-80 max-h-[22rem] flex flex-col bg-slate-900/90 backdrop-blur-xl p-5 rounded-2xl border border-slate-700 shadow-2xl z-20 transition-all duration-500 opacity-0 pointer-events-none translate-y-8">
-        <h3 class="text-sm font-bold text-white mb-4 flex items-center gap-2 border-b border-slate-700 pb-2 shrink-0">
-            <svg class="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path></svg>
-            Karakteristik Wilayah & Litologi
-        </h3>
-        
-        <!-- Kontainer yang bisa discroll -->
-        <div class="space-y-5 overflow-y-auto pr-2 scrollbar-custom flex-1">
-            <!-- Merah -->
-            <div class="flex items-start gap-3">
-                <div class="w-4 h-4 rounded-sm bg-red-500 mt-0.5 shrink-0 border border-red-400/50 shadow-[0_0_8px_rgba(239,68,68,0.6)]"></div>
-                <div class="flex-1">
-                    <p class="text-xs font-bold text-white mb-1.5 border-b border-slate-700/50 pb-1">Merah</p>
-                    <ul class="text-[10px] space-y-1.5 leading-relaxed">
-                        <li><span class="text-slate-400 font-semibold">Lereng:</span> <span class="text-slate-200">16–35°</span></li>
-                        <li><span class="text-slate-400 font-semibold">Topografi:</span> <span class="text-slate-200">kasar, punggungan sirkular tapal kuda</span></li>
-                        <li><span class="text-slate-400 font-semibold">Pola aliran sungai:</span> <span class="text-slate-200">radial sentripetal & rektangular</span></li>
-                        <li><span class="text-slate-400 font-semibold">Litologi:</span> <span class="text-slate-200">batuan gunungapi tua, breksi vulkanik, lava tererosi</span></li>
-                    </ul>
-                </div>
-            </div>
-            
-            <!-- Hijau -->
-            <div class="flex items-start gap-3">
-                <div class="w-4 h-4 rounded-sm bg-green-500 mt-0.5 shrink-0 border border-green-400/50 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></div>
-                <div class="flex-1">
-                    <p class="text-xs font-bold text-white mb-1.5 border-b border-slate-700/50 pb-1">Hijau</p>
-                    <ul class="text-[10px] space-y-1.5 leading-relaxed">
-                        <li><span class="text-slate-400 font-semibold">Lereng:</span> <span class="text-slate-200">16–56°</span></li>
-                        <li><span class="text-slate-400 font-semibold">Topografi:</span> <span class="text-slate-200">punggungan tererosi, lobus lava, tekstur halus hingga kasar</span></li>
-                        <li><span class="text-slate-400 font-semibold">Pola aliran sungai:</span> <span class="text-slate-200">radial sentrifugal → menunjukkan umur gunung lebih muda</span></li>
-                        <li><span class="text-slate-400 font-semibold">Litologi:</span> <span class="text-slate-200">lava basaltik/andesitik, tuff, agglomerate, deposit piroklastik</span></li>
-                    </ul>
+        <section id="page-landing" class="section-view active">
+            <div class="hero-section">
+                <div class="hero-content">
+                    <h1 class="hero-title">GUNUNG BETUNG</h1>
+                    <p style="margin-bottom: 40px; color: #aaa; font-size: 1.2rem;">Eksplorasi Virtual Geologi & Morfometri Terintegrasi</p>
+                    <button class="btn-premium" onclick="Navigation.goTo('page-viewer')">Mulai Eksplorasi 3D</button>
                 </div>
             </div>
 
-            <!-- Biru -->
-            <div class="flex items-start gap-3">
-                <div class="w-4 h-4 rounded-sm bg-blue-500 mt-0.5 shrink-0 border border-blue-400/50 shadow-[0_0_8px_rgba(59,130,246,0.6)]"></div>
-                <div class="flex-1">
-                    <p class="text-xs font-bold text-white mb-1.5 border-b border-slate-700/50 pb-1">Biru</p>
-                    <ul class="text-[10px] space-y-1.5 leading-relaxed">
-                        <li><span class="text-slate-400 font-semibold">Lereng:</span> <span class="text-slate-200">16–56°</span></li>
-                        <li><span class="text-slate-400 font-semibold">Topografi:</span> <span class="text-slate-200">halus hingga sedang</span></li>
-                        <li><span class="text-slate-400 font-semibold">Kawah:</span> <span class="text-slate-200">bukaan berarah baratdaya, pusat erupsi terakhir terlihat</span></li>
-                        <li><span class="text-slate-400 font-semibold">Lobus lava:</span> <span class="text-slate-200">berarah baratdaya</span></li>
-                        <li><span class="text-slate-400 font-semibold">Pola aliran sungai:</span> <span class="text-slate-200">radial sentrifugal → umur lebih muda dibanding wilayah lain</span></li>
-                        <li><span class="text-slate-400 font-semibold">Litologi:</span> <span class="text-slate-200">lava andesitik, tuff, breksi vulkanik, endapan piroklastik halus</span></li>
-                    </ul>
-                </div>
-            </div>
-
-            <!-- Simbol Keterangan Tambahan -->
-            <div class="border-t border-slate-700/80 pt-4 mt-2">
-                <p class="text-xs font-bold text-white mb-3">Keterangan Simbol</p>
-                <div class="space-y-3 pl-1">
-                    <!-- Pusat Erupsi -->
-                    <div class="flex items-center gap-3">
-                        <div class="w-3.5 h-3.5 rounded-full bg-orange-500 shrink-0 border border-orange-300/80 shadow-[0_0_8px_rgba(249,115,22,0.6)]"></div>
-                        <span class="text-[11px] text-slate-200 font-medium tracking-wide">Pusat erupsi</span>
+            <div class="content-grid">
+                <div class="info-panel">
+                    <div class="text-content">
+                        <h2>Warisan Geologi Lampung</h2>
+                        <p>Gunung Betung merupakan bagian integral dari sistem vulkanisme di Provinsi Lampung. Berlokasi di perbatasan Kabupaten Pesawaran dan Kota Bandar Lampung, gunung ini menyimpan sejarah panjang aktivitas tektonik yang membentuk lanskap Sumatera Selatan.</p>
+                        <p>Secara fisiografis, kawasan ini didominasi oleh batuan produk gunung api Kuarter yang terdiri dari breksi, lava, dan tuff yang menjadi fondasi utama kesuburan tanah di sekitarnya.</p>
                     </div>
-                    <!-- Kawah -->
-                    <div class="flex items-center gap-3">
-                        <!-- SVG Kawah dengan garis-garis menjorok ke dalam -->
-                        <svg class="w-4 h-4 text-red-500 shrink-0 drop-shadow-[0_0_5px_rgba(239,68,68,0.6)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                            <path d="M4 16a8 8 0 0 1 16 0" stroke-linecap="round"></path>
-                            <line x1="12" y1="8" x2="12" y2="12" stroke-linecap="round"></line>
-                            <line x1="7.5" y1="9.5" x2="10" y2="12" stroke-linecap="round"></line>
-                            <line x1="16.5" y1="9.5" x2="14" y2="12" stroke-linecap="round"></line>
-                        </svg>
-                        <span class="text-[11px] text-slate-200 font-medium tracking-wide">Kawah</span>
+                    <div class="visual-frame">
+                        <img src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80" alt="Geology">
                     </div>
-                    <!-- Kelurusan -->
-                    <div class="flex items-center gap-3">
-                        <div class="w-4 border-t-[2.5px] border-dashed border-red-500 shrink-0 shadow-[0_0_5px_rgba(239,68,68,0.6)]"></div>
-                        <span class="text-[11px] text-slate-200 font-medium tracking-wide">Kelurusan</span>
+                </div>
+
+                <div class="info-panel">
+                    <div class="text-content">
+                        <h2>Morfometri Lereng</h2>
+                        <p>Analisis morfometri Gunung Betung menunjukkan variasi kemiringan lereng yang kontras. Dari lereng landai di kaki gunung hingga dinding-dinding curam yang terbentuk akibat patahan lokal. Pemetaan ini krusial untuk mitigasi bencana tanah longsor.</p>
+                        <p>Puncak tertinggi mencapai 1.240 meter di atas permukaan laut, memberikan gradien elevasi yang signifikan bagi siklus hidrologi di kawasan penyangga ibu kota provinsi.</p>
+                    </div>
+                    <div class="visual-frame">
+                        <img src="https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=800&q=80" alt="Morfometri">
+                    </div>
+                </div>
+
+                <div class="info-panel">
+                    <div class="text-content">
+                        <h2>Konservasi Air & Hayati</h2>
+                        <p>Sebagai 'menara air' bagi Bandar Lampung, Gunung Betung menjaga suplai air tanah melalui hutan lindung yang masih terjaga. Keanekaragaman hayati di lereng Betung mencakup spesies endemik yang memerlukan perhatian khusus dalam perlindungan habitat.</p>
+                    </div>
+                    <div class="visual-frame">
+                        <img src="https://images.unsplash.com/photo-1511497584788-876760111969?auto=format&fit=crop&w=800&q=80" alt="Konservasi">
                     </div>
                 </div>
             </div>
+        </section>
 
-        </div>
+        <section id="page-viewer" class="section-view">
+            <div id="viewer-container">
+                <canvas id="main-canvas"></canvas>
+                
+                <div class="viewer-ui">
+                    <div class="top-nav">
+                        <button class="btn-premium" style="padding: 12px 25px; font-size: 0.8rem;" onclick="Navigation.goTo('page-landing')">← Kembali</button>
+                        
+                        <div class="control-panel">
+                            <h3 style="font-size: 1rem; color: #fff;">SISTEM VISUALISASI</h3>
+                            <p style="font-size: 0.7rem; color: #666; margin-bottom: 15px;">Pilih lapisan data untuk ditampilkan pada model 3D.</p>
+                            
+                            <div class="mode-selector">
+                                <button class="selector-btn active" onclick="Engine3D.switchLayer('satellite', this)">
+                                    <div style="width:10px; height:10px; border-radius:50%; background:#2ecc71;"></div>
+                                    Citra Satelit
+                                </button>
+                                <button class="selector-btn" onclick="Engine3D.switchLayer('geology', this)">
+                                    <div style="width:10px; height:10px; border-radius:50%; background:#e67e22;"></div>
+                                    Peta Geologi
+                                </button>
+                                <button class="selector-btn" onclick="Engine3D.switchLayer('morphometry', this)">
+                                    <div style="width:10px; height:10px; border-radius:50%; background:#3498db;"></div>
+                                    Analisis Morfometri
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="instruction-tag">Gunakan Mouse: Putar (Left Click), Zoom (Scroll), Geser (Right Click)</div>
+                </div>
+
+                <div id="geology-legend">
+                    <h4 style="margin-bottom: 15px; font-size: 0.9rem;">Legenda Formasi</h4>
+                    <div class="legend-row"><div class="dot" style="background:#ff5252;"></div> <span>Lava Andesit (Qhv)</span></div>
+                    <div class="legend-row"><div class="dot" style="background:#ffd740;"></div> <span>Tuf Banten (Qpt)</span></div>
+                    <div class="legend-row"><div class="dot" style="background:#69f0ae;"></div> <span>Breksi Gunungapi</span></div>
+                    <div class="legend-row"><div class="dot" style="background:#40c4ff;"></div> <span>Aluvial Teluk</span></div>
+                </div>
+            </div>
+        </section>
+
     </div>
 
-    <!-- Bantuan Navigasi -->
-    <div class="absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-slate-900/60 backdrop-blur-md px-6 py-3 rounded-full border border-white/10 text-white text-sm text-center pointer-events-none z-10 shadow-lg">
-        <span class="text-blue-400">Navigasi:</span> Klik & Geser •
-        <span class="text-blue-400">Zoom:</span> Scroll • 
-        <span class="text-emerald-400 font-bold ml-2">KLIK GANDA model untuk ambil kordinat</span>
+    <div id="modal-360">
+        <button class="btn-close-modal" onclick="Engine3D.close360()">✕</button>
+        <canvas id="canvas-360"></canvas>
+
+        <div id="detail-overlay">
+            <h2 id="det-title" style="margin-bottom: 10px;">Detail Lokasi</h2>
+            <p id="det-coord" style="font-family: monospace; font-size: 0.8rem; color: #666; margin-bottom: 20px;">-5.412, 105.234</p>
+            <div id="det-img" style="width:100%; height:200px; background:#eee; border-radius:15px; margin-bottom: 20px; overflow:hidden;"></div>
+            <p id="det-desc" style="line-height: 1.6; color: #444; margin-bottom: 30px;"></p>
+            <button class="btn-premium" style="width: 100%;" onclick="Engine3D.closeDetail()">Tutup Detail</button>
+        </div>
     </div>
 
     <script>
-        let scene, camera, renderer, controls;
-        let baseModel = null;
-        let geologyModel = null;
-        let raycaster, mouse;
+    /**
+     * ============================================================
+     * CORE APPLICATION LOGIC
+     * ============================================================
+     */
 
-        // URL File 3D Lokal
-        const BASE_MAP_URL = 'base_map.glb';
-        const GEOLOGY_MAP_URL = 'geologi_betung.glb';
+    // 1. DATA REPOSITORY (Minimal 17 Hotspots dengan koordinat & konten)
+    const HOTSPOT_DATA = [
+        { id: 1, pos: {x: 120, y: 45, z: 80}, title: "Puncak Betung", desc: "Titik tertinggi gunung ini ditandai dengan vegetasi hutan primer yang lebat. Batuan di sini didominasi oleh lava andesit pyroxen yang sangat masif.", img: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b" },
+        { id: 2, pos: {x: -90, y: 30, z: -150}, title: "Lereng Barat Daya", desc: "Area dengan kelerengan >40%. Memiliki risiko erosi tinggi namun kaya akan sumber mata air.", img: "https://images.unsplash.com/photo-1506744038136-46273834b3fb" },
+        { id: 3, pos: {x: 40, y: 15, z: 200}, title: "Zona Tuf Banten", desc: "Singkapan batuan tuff vulkanik yang menunjukkan riwayat letusan eksplosif masa lampau.", img: "https://images.unsplash.com/photo-1518495973542-4542c06a5843" },
+        { id: 4, pos: {x: -200, y: 20, z: 50}, title: "Sesar Lokal A", desc: "Jalur patahan yang memicu terbentuknya lembah sempit di sisi barat.", img: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b" },
+        { id: 5, pos: {x: 80, y: 10, z: -250}, title: "Hutan Lindung", desc: "Kawasan konservasi utama yang menampung beragam fauna endemik Lampung.", img: "https://images.unsplash.com/photo-1511497584788-876760111969" },
+        { id: 6, pos: {x: 180, y: 5, z: -100}, title: "Kaki Gunung Timur", desc: "Pertemuan antara batuan vulkanik dan endapan aluvial pesisir.", img: "https://images.unsplash.com/photo-1501785888041-af3ef285b470" },
+        { id: 7, pos: {x: -50, y: 40, z: 120}, title: "Kawah Purba", desc: "Depresi topografi yang diduga merupakan sisa kawah dari aktivitas vulkanik purba.", img: "https://images.unsplash.com/photo-1518495973542-4542c06a5843" },
+        { id: 8, pos: {x: 250, y: 2, z: 250}, title: "Batas Kawasan", desc: "Titik koordinat batas luar area konservasi Gunung Betung.", img: "https://images.unsplash.com/photo-1506744038136-46273834b3fb" },
+        { id: 9, pos: {x: -150, y: 12, z: -300}, title: "Sungai Hulu", desc: "Hulu sungai utama yang mengalir menuju sistem drainase kota.", img: "https://images.unsplash.com/photo-1511497584788-876760111969" },
+        { id: 10, pos: {x: 0, y: 60, z: 0}, title: "Pusat Geodetik", desc: "Titik referensi pemetaan ketinggian wilayah Lampung.", img: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b" },
+        { id: 11, pos: {x: 100, y: 25, z: -50}, title: "Jalur Pendakian", desc: "Akses utama bagi peneliti dan pendaki untuk mencapai zona puncak.", img: "https://images.unsplash.com/photo-1501785888041-af3ef285b470" },
+        { id: 12, pos: {x: -80, y: 35, z: 80}, title: "Dinding Terjal", desc: "Formasi batuan beku yang muncul ke permukaan akibat tektonik.", img: "https://images.unsplash.com/photo-1518495973542-4542c06a5843" },
+        { id: 13, pos: {x: 220, y: 10, z: -180}, title: "Zona Transisi", desc: "Perubahan vegetasi dari hutan pegunungan ke hutan dataran rendah.", img: "https://images.unsplash.com/photo-1511497584788-876760111969" },
+        { id: 14, pos: {x: -250, y: 8, z: 200}, title: "Area Buffer", desc: "Zona penyangga antara hutan dan lahan pertanian warga.", img: "https://images.unsplash.com/photo-1506744038136-46273834b3fb" },
+        { id: 15, pos: {x: 140, y: 18, z: 300}, title: "Anomali Magnetik", desc: "Lokasi dengan kandungan mineral feromagnetik tinggi di batuan.", img: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b" },
+        { id: 16, pos: {x: 300, y: 1, z: 0}, title: "Sisi Pesisir", desc: "Lereng terbawah yang berhadapan langsung dengan Teluk Lampung.", img: "https://images.unsplash.com/photo-1501785888041-af3ef285b470" },
+        { id: 17, pos: {x: -120, y: 22, z: -40}, title: "Laboratorium Alam", desc: "Area studi khusus geologi struktur bagi akademisi lokal.", img: "https://images.unsplash.com/photo-1518495973542-4542c06a5843" }
+    ];
 
-        let progressBase = 0;
-        let progressGeo = 0;
-
-        // ==========================================
-        // DATA MARKER / TITIK LOKASI
-        // ==========================================
-        const markersData = [
-            {
-                id: 'site1',
-                position: { x: -0.557, y: 1.136, z: -2.662 }, 
-                title: "Air Terjun Puncak Gunung",
-                description: "Destinasi wisata alam air terjun yang terletak di puncak gunung.",
-                image: ""
-            },
-              {
-                id: 'site2',
-                position: { x: -0.681, y: 0.770, z: -3.464  }, 
-                title: "Registrasi",
-                description: "Tempat registrasi.",
-                image: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSwbtczLFlKovkbLmpLZr2j7VXUXoJimRRTWg&s"
-                    },
-             {
-                id: 'site3',
-                position: { x: 0.167, y: 2.225, z: -1.002 }, 
-                title: "Puncak",
-                description: "Puncak gunung merupakan titik elevasi tertinggi yang menandai pusat aktivitas vulkanik.",
-                image: ""
-                    }
-        ];
-
-        function init() {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x020617);
+    // 2. NAVIGATION SYSTEM (SPA)
+    const Navigation = {
+        goTo(pageId) {
+            const current = document.querySelector('.section-view.active');
+            const target = document.getElementById(pageId);
             
-            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 5000);
-            camera.position.set(0, 100, 150);
+            if (current) {
+                current.style.opacity = '0';
+                setTimeout(() => {
+                    current.classList.remove('active');
+                    target.classList.add('active');
+                    setTimeout(() => {
+                        target.style.opacity = '1';
+                        if(pageId === 'page-viewer') Engine3D.resize();
+                    }, 50);
+                }, 800);
+            }
+        },
 
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-            renderer.outputEncoding = THREE.sRGBEncoding;
-            renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            document.body.appendChild(renderer.domElement);
+        initScrollReveal() {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(e => {
+                    if(e.isIntersecting) e.target.classList.add('visible');
+                });
+            }, { threshold: 0.2 });
 
-            // Lighting
-            scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+            document.querySelectorAll('.info-panel').forEach(p => observer.observe(p));
+        }
+    };
+
+    // 3. 3D ENGINE SYSTEM
+    const Engine3D = {
+        scene: null, camera: null, renderer: null, controls: null,
+        terrain: null, hotspots: [], raycaster: new THREE.Raycaster(),
+        mouse: new THREE.Vector2(), currentMode: 'satellite',
+
+        // 360 System
+        scene360: null, cam360: null, render360: null, control360: null,
+
+        init() {
+            console.log("Initializing 3D Engine...");
+            this.setupMainScene();
+            this.setupLighting();
+            this.createTerrain();
+            this.spawnHotspots();
+            this.setupEventListeners();
+            this.animate();
+        },
+
+        setupMainScene() {
+            this.scene = new THREE.Scene();
+            this.scene.background = new THREE.Color(0x050505);
+            this.scene.fog = new THREE.Fog(0x050505, 500, 2000);
+
+            this.camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 5000);
+            this.camera.position.set(600, 600, 600);
+
+            this.renderer = new THREE.WebGLRenderer({
+                canvas: document.getElementById('main-canvas'),
+                antialias: true,
+                powerPreference: "high-performance"
+            });
+            this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            this.renderer.setSize(window.innerWidth, window.innerHeight);
+
+            this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+            this.controls.enableDamping = true;
+            this.controls.dampingFactor = 0.05;
+            this.controls.maxPolarAngle = Math.PI / 2.1;
+        },
+
+        setupLighting() {
+            const ambient = new THREE.AmbientLight(0xffffff, 0.4);
             const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-            sun.position.set(100, 200, 50);
-            sun.castShadow = true;
-            sun.shadow.mapSize.width = 1024;
-            sun.shadow.mapSize.height = 1024;
-            scene.add(sun);
+            sun.position.set(500, 1000, 250);
+            this.scene.add(ambient, sun);
+        },
 
-            controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.05;
-
-            // Setup Raycaster
-            raycaster = new THREE.Raycaster();
-            mouse = new THREE.Vector2();
-            renderer.domElement.addEventListener('dblclick', onDoubleClickGetCoordinates, false);
-
-            window.addEventListener('resize', onWindowResize);
+        createTerrain() {
+            // Dalam implementasi nyata: GLTFLoader.load('betung_satellite.glb')
+            // Di sini kita mensimulasikan geometri kompleks dengan plane buffer yang di-deformasi
+            const geo = new THREE.PlaneGeometry(1000, 1000, 128, 128);
             
-            loadAllModels();
-            animate();
-        }
+            // Prosedural Noise untuk Gunung (Simulasi Realitas)
+            const pos = geo.attributes.position;
+            for(let i=0; i<pos.count; i++) {
+                const x = pos.getX(i);
+                const y = pos.getY(i);
+                // Fungsi matematika untuk membentuk kerucut gunung api dengan noise
+                const dist = Math.sqrt(x*x + y*y);
+                let height = Math.exp(-dist/250) * 200;
+                height += Math.sin(x/20) * Math.cos(y/20) * 5; // Noise lereng
+                pos.setZ(i, height);
+            }
+            geo.computeVertexNormals();
 
-        function updateCombinedProgress() {
-            const totalProgress = (progressBase + progressGeo) / 2;
-            document.getElementById('progress-bar').style.width = totalProgress + '%';
-        }
+            const mat = this.getMaterial('satellite');
+            this.terrain = new THREE.Mesh(geo, mat);
+            this.terrain.rotation.x = -Math.PI / 2;
+            this.scene.add(this.terrain);
+        },
 
-        async function loadAllModels() {
-            const statusText = document.getElementById('status-text');
-            const loaderTitle = document.getElementById('loader-title');
-            const loaderEl = document.getElementById('loader');
-            const progressContainer = document.getElementById('progress-container');
-            const fallbackUi = document.getElementById('fallback-ui');
-
-            try {
-                // 1. Muat Base Map
-                statusText.innerText = "MENGUNDUH BASE MAP...";
-                baseModel = await loadModelPromise(BASE_MAP_URL, (percent) => {
-                    progressBase = percent;
-                    updateCombinedProgress();
-                });
-
-                const targetPosition = processAndScaleModel(baseModel, true);
-
-                // 2. Muat Geologi Map
-                statusText.innerText = "MENGUNDUH LAPISAN GEOLOGI...";
-                try {
-                    geologyModel = await loadModelPromise(GEOLOGY_MAP_URL, (percent) => {
-                        progressGeo = percent;
-                        updateCombinedProgress();
+        getMaterial(mode) {
+            const loader = new THREE.TextureLoader();
+            switch(mode) {
+                case 'satellite':
+                    return new THREE.MeshStandardMaterial({ 
+                        color: 0x2d5a27, 
+                        roughness: 0.8,
+                        metalness: 0.1,
+                        flatShading: false
                     });
-
-                    geologyModel.scale.copy(baseModel.scale);
-                    geologyModel.position.copy(targetPosition);
-                    geologyModel.position.y += 0.2; // Offset fix z-fighting
-
-                    applyTransparentMaterial(geologyModel);
-                    geologyModel.visible = false;
-                    scene.add(geologyModel);
-
-                } catch (geoError) {
-                    console.warn("Geology map tidak ditemukan, melanjutkan dengan Base Map saja.", geoError);
-                    statusText.innerText = "LAPISAN GEOLOGI TIDAK DITEMUKAN. MELANJUTKAN...";
-                    document.getElementById('geology-toggle').disabled = true;
-                }
-
-                finalizeLoading(loaderEl, statusText);
-
-            } catch (error) {
-                // TAMPILKAN FALLBACK UI
-                console.error("Fatal Load Error:", error);
-                loaderTitle.innerText = "GAGAL MEMUAT SERVER FILE";
-                loaderTitle.style.color = "#ef4444";
-                loaderTitle.classList.remove('animate-pulse');
-                progressContainer.style.display = 'none';
-                
-                statusText.className = "text-slate-300 text-sm mt-4 text-center max-w-md";
-                statusText.innerHTML = `Base map <b>${BASE_MAP_URL}</b> tidak ditemukan.<br>Silakan pilih file secara manual di bawah ini:`;
-                
-                fallbackUi.classList.remove('hidden');
+                case 'geology':
+                    return new THREE.MeshStandardMaterial({ 
+                        color: 0x8e44ad,
+                        wireframe: false,
+                        emissive: 0x221133
+                    });
+                case 'morphometry':
+                    return new THREE.MeshPhongMaterial({ 
+                        color: 0x3498db, 
+                        wireframe: true,
+                        transparent: true,
+                        opacity: 0.6
+                    });
             }
-        }
+        },
 
-        async function loadLocalFiles() {
-            const baseInput = document.getElementById('fallback-base');
-            const geoInput = document.getElementById('fallback-geo');
+        async switchLayer(mode, btn) {
+            if(this.currentMode === mode) return;
             
-            if (!baseInput.files || baseInput.files.length === 0) {
-                alert("Harap pilih file Base Map (.glb) terlebih dahulu!");
-                return;
-            }
+            // UI Feedback
+            document.querySelectorAll('.selector-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            this.currentMode = mode;
+            document.getElementById('geology-legend').style.display = (mode === 'geology') ? 'block' : 'none';
 
-            const loaderTitle = document.getElementById('loader-title');
-            const statusText = document.getElementById('status-text');
-            const loaderEl = document.getElementById('loader');
-            const fallbackUi = document.getElementById('fallback-ui');
-            const progressContainer = document.getElementById('progress-container');
+            // Transition Animation
+            gsap.to(this.terrain.scale, { x: 0.95, z: 0.95, y: 0.95, duration: 0.3, yoyo: true, repeat: 1 });
+            
+            // Dispose and Refresh
+            this.terrain.material.dispose();
+            this.terrain.material = this.getMaterial(mode);
+        },
 
-            fallbackUi.classList.add('hidden');
-            progressContainer.style.display = 'block';
-            loaderTitle.innerText = "MEMPROSES FILE LOKAL...";
-            loaderTitle.style.color = "#fff";
-            loaderTitle.classList.add('animate-pulse');
-            progressBase = 0;
-            progressGeo = 0;
-
-            try {
-                const baseUrl = URL.createObjectURL(baseInput.files[0]);
-                statusText.innerText = "MEMUAT BASE MAP LOKAL...";
-                baseModel = await loadModelPromise(baseUrl, (percent) => {
-                    progressBase = percent; updateCombinedProgress();
+        spawnHotspots() {
+            const geo = new THREE.SphereGeometry(6, 24, 24);
+            
+            HOTSPOT_DATA.forEach(data => {
+                const mat = new THREE.MeshBasicMaterial({ 
+                    color: (data.id % 2 === 0) ? 0xff5252 : 0xffd740,
+                    transparent: true,
+                    opacity: 0.8
                 });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(data.pos.x, data.pos.y, data.pos.z);
+                mesh.userData = data;
 
-                const targetPosition = processAndScaleModel(baseModel, true);
+                // Glowing effect (Ring)
+                const ringGeo = new THREE.RingGeometry(8, 10, 32);
+                const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.3 });
+                const ring = new THREE.Mesh(ringGeo, ringMat);
+                ring.rotation.x = Math.PI / 2;
+                mesh.add(ring);
 
-                if (geoInput.files && geoInput.files.length > 0) {
-                    const geoUrl = URL.createObjectURL(geoInput.files[0]);
-                    statusText.innerText = "MEMUAT GEOLOGI MAP LOKAL...";
-                    
-                    try {
-                        geologyModel = await loadModelPromise(geoUrl, (percent) => {
-                            progressGeo = percent; updateCombinedProgress();
-                        });
+                this.scene.add(mesh);
+                this.hotspots.push(mesh);
+            });
+        },
 
-                        geologyModel.scale.copy(baseModel.scale);
-                        geologyModel.position.copy(targetPosition);
-                        geologyModel.position.y += 0.2;
+        setupEventListeners() {
+            window.addEventListener('resize', () => this.resize());
+            
+            this.renderer.domElement.addEventListener('click', (e) => {
+                this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
 
-                        applyTransparentMaterial(geologyModel);
-                        geologyModel.visible = false;
-                        scene.add(geologyModel);
-                        
-                        document.getElementById('geology-toggle').disabled = false;
-                        document.getElementById('geology-toggle').checked = false; 
-                    } catch (geoError) {
-                        alert("Gagal memuat file Geologi. Melanjutkan dengan Base Map saja.");
-                        document.getElementById('geology-toggle').disabled = true;
-                    }
-                } else {
-                    progressGeo = 100;
-                    updateCombinedProgress();
-                    document.getElementById('geology-toggle').disabled = true;
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                const hits = this.raycaster.intersectObjects(this.hotspots);
+
+                if(hits.length > 0) {
+                    this.open360(hits[0].object.userData);
                 }
+            });
 
-                finalizeLoading(loaderEl, statusText);
+            // Hover effect
+            this.renderer.domElement.addEventListener('mousemove', (e) => {
+                this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                const hits = this.raycaster.intersectObjects(this.hotspots);
+                this.renderer.domElement.style.cursor = hits.length > 0 ? 'pointer' : 'default';
+            });
+        },
 
-            } catch (error) {
-                alert("Gagal membaca file lokal: " + error.message);
-                fallbackUi.classList.remove('hidden');
-                progressContainer.style.display = 'none';
-                loaderTitle.innerText = "GAGAL MEMUAT";
-                loaderTitle.classList.remove('animate-pulse');
+        resize() {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            this.camera.aspect = w / h;
+            this.camera.updateProjectionMatrix();
+            this.renderer.setSize(w, h);
+            
+            if(this.render360) {
+                this.cam360.aspect = w / h;
+                this.cam360.updateProjectionMatrix();
+                this.render360.setSize(w, h);
             }
-        }
+        },
 
-        function loadModelPromise(url, onProgressCb) {
-            return new Promise((resolve, reject) => {
-                const loader = new THREE.GLTFLoader();
-                loader.load(
-                    url,
-                    (gltf) => resolve(gltf.scene),
-                    (xhr) => {
-                        if (xhr.lengthComputable) onProgressCb((xhr.loaded / xhr.total) * 100);
-                        else onProgressCb(50); 
-                    },
-                    (error) => reject(error)
+        open360(data) {
+            const modal = document.getElementById('modal-360');
+            modal.style.display = 'block';
+            
+            if(!this.render360) {
+                this.scene360 = new THREE.Scene();
+                this.cam360 = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 1, 1100);
+                this.render360 = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas-360'), antialias: true });
+                this.render360.setSize(window.innerWidth, window.innerHeight);
+                this.control360 = new THREE.OrbitControls(this.cam360, this.render360.domElement);
+                this.control360.enableZoom = false;
+                this.control360.autoRotate = true;
+                this.control360.autoRotateSpeed = 0.5;
+            }
+
+            // Inverted Sphere
+            const sphereGeo = new THREE.SphereGeometry(500, 60, 40);
+            sphereGeo.scale(-1, 1, 1);
+            
+            const tex = new THREE.TextureLoader().load('https://threejs.org/examples/textures/2294472375_b4a848c635_k.jpg');
+            const sphereMat = new THREE.MeshBasicMaterial({ map: tex });
+            const panorama = new THREE.Mesh(sphereGeo, sphereMat);
+            this.scene360.add(panorama);
+
+            // Create 360-Inner-Hotspot
+            this.createInnerHotspot(data);
+        },
+
+        createInnerHotspot(data) {
+            const loader = new THREE.TextureLoader();
+            const icon = loader.load('https://cdn-icons-png.flaticon.com/512/684/684908.png');
+            const spriteMat = new THREE.SpriteMaterial({ map: icon });
+            const sprite = new THREE.Sprite(spriteMat);
+            sprite.scale.set(30, 30, 1);
+            sprite.position.set(200, 50, -300);
+            sprite.userData = data;
+            this.scene360.add(sprite);
+
+            // Raycaster for Inner Sprite
+            const ray360 = new THREE.Raycaster();
+            this.render360.domElement.onclick = (e) => {
+                const m = new THREE.Vector2(
+                    (e.clientX / window.innerWidth) * 2 - 1,
+                    -(e.clientY / window.innerHeight) * 2 + 1
                 );
-            });
-        }
+                ray360.setFromCamera(m, this.cam360);
+                const hits = ray360.intersectObject(sprite);
+                if(hits.length > 0) this.openDetail(hits[0].object.userData);
+            };
+        },
 
-        function processAndScaleModel(model, isBaseModel) {
-            const box = new THREE.Box3().setFromObject(model);
-            const size = box.getSize(new THREE.Vector3());
-            const center = box.getCenter(new THREE.Vector3());
-            
-            const maxDim = Math.max(size.x, size.y, size.z);
-            const scale = 200 / maxDim;
-            
-            model.scale.setScalar(scale);
-            const targetPosition = center.clone().multiplyScalar(scale).negate();
-            targetPosition.y = 0; 
-            model.position.copy(targetPosition);
+        openDetail(data) {
+            document.getElementById('det-title').innerText = data.title;
+            document.getElementById('det-desc').innerText = data.desc;
+            document.getElementById('det-img').innerHTML = `<img src="${data.img}" style="width:100%; height:100%; object-fit:cover;">`;
+            document.getElementById('detail-overlay').style.display = 'block';
+            gsap.from("#detail-overlay", { x: 100, opacity: 0, duration: 0.5 });
+        },
 
-            if(isBaseModel) {
-                applyStandardMaterial(model);
-                scene.add(model);
+        closeDetail() {
+            document.getElementById('detail-overlay').style.display = 'none';
+        },
+
+        close360() {
+            document.getElementById('modal-360').style.display = 'none';
+            // Clean up scene360
+            while(this.scene360.children.length > 0){ 
+                this.scene360.remove(this.scene360.children[0]); 
             }
-            return targetPosition;
-        }
+        },
 
-        function applyStandardMaterial(model) {
-            model.traverse((node) => {
-                if (node.isMesh) {
-                    node.castShadow = true; node.receiveShadow = true;
-                    if (node.material) {
-                        const materials = Array.isArray(node.material) ? node.material : [node.material];
-                        materials.forEach(m => {
-                            if (!m.map || (m.color && m.color.getHex() === 0x000000)) {
-                                if (m.color) m.color.setHex(0xd0d0d0);
-                            }
-                            m.transparent = false; m.opacity = 1.0; m.needsUpdate = true;
-                        });
-                    }
-                }
-            });
-        }
-
-        function applyTransparentMaterial(model) {
-            model.traverse((node) => {
-                if (node.isMesh) {
-                    node.castShadow = false; node.receiveShadow = true;
-                    node.renderOrder = 1; 
-                    if (node.material) {
-                        const materials = Array.isArray(node.material) ? node.material : [node.material];
-                        materials.forEach(m => {
-                            const mClone = m.clone(); 
-                            mClone.transparent = true;
-                            mClone.opacity = 0.75; 
-                            mClone.depthTest = true; 
-                            mClone.depthWrite = false; 
-                            mClone.needsUpdate = true;
-                            node.material = mClone;
-                        });
-                    }
-                }
-            });
-        }
-
-        function finalizeLoading(loaderEl, statusText) {
-            initMarkers();
-            statusText.innerText = "MEMBANGUN ENVIRONMENT 3D...";
-            renderer.render(scene, camera);
-            loaderEl.style.opacity = '0';
-            setTimeout(() => loaderEl.style.display = 'none', 1000);
-        }
-
-        window.toggleGeologyLayer = function() {
-            const toggleBtn = document.getElementById('geology-toggle');
-            const legendPanel = document.getElementById('geology-legend');
+        animate() {
+            requestAnimationFrame(() => this.animate());
             
-            if (!geologyModel) {
-                console.warn("Geology model belum tersedia!");
-                return;
-            }
-            
-            const isVisible = toggleBtn.checked;
-            geologyModel.visible = isVisible;
-            
-            geologyModel.traverse((child) => {
-                if (child.isMesh) child.visible = isVisible;
-            });
-
-            if (isVisible) {
-                legendPanel.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-8');
-                legendPanel.classList.add('opacity-100', 'pointer-events-auto', 'translate-y-0');
-            } else {
-                legendPanel.classList.add('opacity-0', 'pointer-events-none', 'translate-y-8');
-                legendPanel.classList.remove('opacity-100', 'pointer-events-auto', 'translate-y-0');
-            }
-        };
-
-        function initMarkers() {
-            const container = document.getElementById('markers-container');
-            container.innerHTML = '';
-            if (!baseModel) return;
-
-            // Bersihkan dummy (titik tumpu) lama agar tidak terjadi duplikasi memori saat klik ganda
-            markersData.forEach(data => {
-                if (data.dummy3D && data.dummy3D.parent) {
-                    data.dummy3D.parent.remove(data.dummy3D);
-                }
-            });
-
-            markersData.forEach(data => {
-                const dummy = new THREE.Object3D();
+            if(document.getElementById('page-viewer').classList.contains('active')) {
+                this.controls.update();
+                this.renderer.render(this.scene, this.camera);
                 
-                // Murni menggunakan koordinat asli (baik dari double-click maupun hardcode)
-                // Fitur Auto-Snap (Raycaster) dihapus karena justru membuat koordinat meleset
-                dummy.position.set(data.position.x, data.position.y, data.position.z);
-                baseModel.add(dummy); 
-                data.dummy3D = dummy;
-
-                const markerEl = document.createElement('div');
-                markerEl.className = 'marker';
-                markerEl.innerHTML = `<div class="marker-icon"></div><div class="tooltip">${data.title}</div>`;
-                
-                markerEl.addEventListener('click', (e) => {
-                    e.stopPropagation(); showPanel(data);
+                // Animasi hotspot pulse
+                const time = Date.now() * 0.002;
+                this.hotspots.forEach(h => {
+                    h.children[0].scale.setScalar(1 + Math.sin(time) * 0.2);
                 });
-
-                container.appendChild(markerEl);
-                data.htmlElement = markerEl;
-            });
-        }
-
-        function updateMarkersPosition() {
-            if (!baseModel) return;
-
-            markersData.forEach(data => {
-                if (!data.dummy3D || !data.htmlElement) return;
-
-                const tempV = new THREE.Vector3();
-                data.dummy3D.getWorldPosition(tempV);
-                tempV.project(camera);
-
-                if (tempV.z > 1) {
-                    data.htmlElement.style.display = 'none'; return;
-                }
-
-                const x = (tempV.x * 0.5 + 0.5) * window.innerWidth;
-                const y = (tempV.y * -0.5 + 0.5) * window.innerHeight;
-
-                data.htmlElement.style.display = 'block';
-                // DIUBAH: Menggunakan left & top untuk kompatibilitas dengan transform ujung pin
-                data.htmlElement.style.left = `${x}px`;
-                data.htmlElement.style.top = `${y}px`;
-                data.htmlElement.style.zIndex = Math.round((1 - tempV.z) * 1000); 
-            });
-        }
-
-        window.showPanel = function(data) {
-            const panel = document.getElementById('info-panel');
-            const imgEl = document.getElementById('panel-image');
-            
-            document.getElementById('panel-title').innerText = data.title;
-            document.getElementById('panel-desc').innerText = data.description;
-            
-            if(data.image) {
-                imgEl.style.display = 'block'; imgEl.style.backgroundImage = `url('${data.image}')`;
-            } else {
-                imgEl.style.display = 'none';
             }
 
-            panel.classList.remove('hidden-panel');
-        };
-
-        window.closePanel = function() {
-            document.getElementById('info-panel').classList.add('hidden-panel');
-        };
-
-        function onDoubleClickGetCoordinates(event) {
-            const intersectTargets = [];
-            if (baseModel && baseModel.visible) intersectTargets.push(baseModel);
-            if (geologyModel && geologyModel.visible) intersectTargets.push(geologyModel);
-
-            if (intersectTargets.length === 0) return;
-
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObjects(intersectTargets, true);
-
-            if (intersects.length > 0) {
-                const point = intersects[0].point;
-                const localPoint = baseModel.worldToLocal(point.clone());
-                
-                const coordString = `{ x: ${localPoint.x.toFixed(3)}, y: ${localPoint.y.toFixed(3)}, z: ${localPoint.z.toFixed(3)} }`;
-                
-                const toast = document.getElementById('coord-toast');
-                toast.innerHTML = `Koordinat Tersalin!<br><span class="text-xs text-emerald-200">${coordString}</span>`;
-                toast.style.opacity = '1';
-                
-                const tempMarkerData = {
-                    id: 'temp_' + Date.now(),
-                    position: localPoint,
-                    title: "Titik Inspeksi Baru",
-                    description: `Koordinat lokal: ${coordString}\n\nLayer terbaca: ${intersects[0].object.name || 'Permukaan'}.`,
-                    image: null
-                };
-                markersData.push(tempMarkerData);
-                initMarkers(); 
-                showPanel(tempMarkerData);
-
-                setTimeout(() => toast.style.opacity = '0', 4000);
+            if(document.getElementById('modal-360').style.display === 'block') {
+                this.control360.update();
+                this.render360.render(this.scene360, this.cam360);
             }
         }
+    };
 
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            if (controls) controls.update();
-            updateMarkersPosition(); 
-            renderer.render(scene, camera);
-        }
-
-        window.onload = init;
+    // 4. BOOTSTRAP
+    window.onload = () => {
+        // Simulasi Loading Progress
+        let progress = 0;
+        const interval = setInterval(() => {
+            progress += Math.random() * 20;
+            if(progress >= 100) {
+                progress = 100;
+                clearInterval(interval);
+                gsap.to("#master-loader", { 
+                    opacity: 0, 
+                    duration: 1, 
+                    onComplete: () => {
+                        document.getElementById('master-loader').style.display = 'none';
+                        Navigation.initScrollReveal();
+                        Engine3D.init();
+                    }
+                });
+            }
+            document.getElementById('load-fill').style.width = progress + '%';
+            document.getElementById('load-status').innerText = `PARSING ASSETS: ${Math.floor(progress)}%`;
+        }, 200);
+    };
     </script>
 </body>
 </html>
