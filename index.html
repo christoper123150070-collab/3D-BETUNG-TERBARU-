@@ -1140,15 +1140,48 @@
                 this.mode = mode;
                 this.showLoading(true);
                 
-                // Map mode to requested filenames
+                // Tentukan nama file berdasarkan mode
                 let filename = '';
                 if(mode === 'SATELIT') filename = 'betung_satellite.glb';
                 else if(mode === 'GEOLOGI') filename = 'betung_geology.glb';
                 else if(mode === 'MORFOMETRI') filename = 'betung_morphometry.glb';
 
-                // Real-world fallback: Since GLBs don't exist, we construct a highly complex procedural 
-                // terrain mathematically to satisfy "No Dummy, Interaktif Penuh, Profesional" requirement.
-                // An elite engineer anticipates missing external assets.
+                // Bersihkan model sebelumnya dari memory
+                this.disposeModel(); 
+
+                // Load file .glb asli Anda
+                this.loader.load(
+                    filename,
+                    (gltf) => {
+                        const model = gltf.scene;
+                        
+                        // Opsional: Sesuaikan skala atau posisi jika model Anda terlalu besar/kecil
+                        // model.scale.set(1, 1, 1);
+                        // model.position.set(0, 0, 0);
+
+                        // Tambahkan model ke dalam scene
+                        this.currentModelGroup.add(model);
+                        
+                        // Muat interaksi setelah model selesai dimuat
+                        this.createHotspots();
+                        if(mode === 'GEOLOGI') this.applyGeologyOverlays();
+                        
+                        this.showLoading(false);
+                    },
+                    (xhr) => {
+                        // Animasi loading bar berdasarkan ukuran file model Anda
+                        if (xhr.total > 0) {
+                            const percent = (xhr.loaded / xhr.total) * 100;
+                            document.getElementById('loading-bar').style.width = percent + '%';
+                        }
+                    },
+                    (error) => {
+                        console.error('Gagal memuat model:', error);
+                        this.showLoading(false);
+                        alert("Gagal memuat " + filename + ". Pastikan file .glb ada di folder yang sama dan Anda menggunakan Local Server.");
+                    }
+                );
+            },
                 
                 setTimeout(() => {
                     this.disposeModel(); // Clean memory
